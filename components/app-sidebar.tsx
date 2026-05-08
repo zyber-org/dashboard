@@ -5,11 +5,20 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import {
-  BellIcon,
+  ActivityIcon,
+  CalendarIcon,
+  FlagIcon,
   GaugeIcon,
+  HardDriveIcon,
   MailPlusIcon,
+  RadioIcon,
+  ScrollIcon,
   SettingsIcon,
+  ShieldIcon,
+  Trash2Icon,
+  UserCogIcon,
   UsersIcon,
+  UsersRoundIcon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -17,6 +26,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -37,26 +47,73 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>
 }
 
-const NAV: NavItem[] = [
-  { section: "overview", href: "/", label: "Overview", icon: GaugeIcon },
+type NavGroup = {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    section: "notifications",
-    href: "/notifications",
-    label: "Notifications",
-    icon: BellIcon,
-  },
-  { section: "users", href: "/users", label: "Users", icon: UsersIcon },
-  {
-    section: "invitations",
-    href: "/invitations",
-    label: "Invitations",
-    icon: MailPlusIcon,
+    label: "Overview",
+    items: [
+      { section: "telemetry", href: "/", label: "Telemetry", icon: GaugeIcon },
+      { section: "live", href: "/live", label: "Live users", icon: ActivityIcon },
+    ],
   },
   {
-    section: "settings",
-    href: "/settings",
-    label: "Settings",
-    icon: SettingsIcon,
+    label: "Moderation",
+    items: [
+      { section: "users", href: "/users", label: "Users", icon: UsersIcon },
+      { section: "reports", href: "/reports", label: "Reports", icon: FlagIcon },
+      {
+        section: "deletion-requests",
+        href: "/deletion-requests",
+        label: "Deletion requests",
+        icon: Trash2Icon,
+      },
+      {
+        section: "work-email",
+        href: "/work-email",
+        label: "Work email",
+        icon: ShieldIcon,
+      },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      {
+        section: "communities",
+        href: "/communities",
+        label: "Communities",
+        icon: UsersRoundIcon,
+      },
+      { section: "events", href: "/events", label: "Events", icon: CalendarIcon },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { section: "logs", href: "/logs", label: "Logs", icon: ScrollIcon },
+      {
+        section: "maintainers",
+        href: "/maintainers",
+        label: "Maintainers",
+        icon: UserCogIcon,
+      },
+      { section: "version", href: "/version", label: "Version", icon: HardDriveIcon },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      {
+        section: "invitations",
+        href: "/invitations",
+        label: "Invitations",
+        icon: MailPlusIcon,
+      },
+    ],
   },
 ]
 
@@ -68,7 +125,11 @@ export function AppSidebar({
   user: { name: string; email: string; image: string | null }
 }) {
   const pathname = usePathname()
-  const items = NAV.filter((item) => canAccess(role, item.section))
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => canAccess(role, item.section)),
+  })).filter((group) => group.items.length > 0)
 
   return (
     <Sidebar collapsible="icon">
@@ -95,30 +156,33 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {items.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href))
-                const Icon = item.icon
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      tooltip={item.label}
-                      isActive={active}
-                      render={<Link href={item.href} />}
-                    >
-                      <Icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {visibleGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-1">
+                {group.items.map((item) => {
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== "/" && pathname.startsWith(item.href))
+                  const Icon = item.icon
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        tooltip={item.label}
+                        isActive={active}
+                        render={<Link href={item.href} />}
+                      >
+                        <Icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>

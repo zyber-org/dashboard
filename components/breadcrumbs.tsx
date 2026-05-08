@@ -12,11 +12,18 @@ import {
 } from "@/components/ui/breadcrumb"
 
 const LABELS: Record<string, string> = {
-  "": "Overview",
-  notifications: "Notifications",
+  "": "Telemetry",
   users: "Users",
+  live: "Live users",
+  reports: "Reports",
+  "deletion-requests": "Deletion requests",
+  "work-email": "Work email",
+  communities: "Communities",
+  events: "Events",
+  logs: "Logs",
+  maintainers: "Maintainers",
+  version: "Version",
   invitations: "Invitations",
-  settings: "Settings",
 }
 
 function labelFor(segment: string) {
@@ -30,9 +37,9 @@ export function Breadcrumbs() {
 
   const crumbs =
     segments.length === 0
-      ? [{ href: "/", label: "Overview", isCurrent: true }]
+      ? [{ href: "/", label: "Telemetry", isCurrent: true }]
       : [
-          { href: "/", label: "Overview", isCurrent: false },
+          { href: "/", label: "Telemetry", isCurrent: false },
           ...segments.map((seg, i) => ({
             href: "/" + segments.slice(0, i + 1).join("/"),
             label: labelFor(seg),

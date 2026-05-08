@@ -2,15 +2,37 @@ export const ROLES = ["admin", "marketing", "user"] as const
 export type Role = (typeof ROLES)[number]
 
 export type DashboardSection =
-  | "overview"
-  | "notifications"
+  | "telemetry"
   | "users"
+  | "live"
+  | "work-email"
+  | "deletion-requests"
+  | "reports"
+  | "communities"
+  | "events"
+  | "logs"
+  | "maintainers"
+  | "version"
   | "invitations"
-  | "settings"
+
+const ALL_ADMIN: DashboardSection[] = [
+  "telemetry",
+  "users",
+  "live",
+  "work-email",
+  "deletion-requests",
+  "reports",
+  "communities",
+  "events",
+  "logs",
+  "maintainers",
+  "version",
+  "invitations",
+]
 
 const ACCESS: Record<Role, DashboardSection[]> = {
-  admin: ["overview", "notifications", "users", "invitations", "settings"],
-  marketing: ["notifications"],
+  admin: ALL_ADMIN,
+  marketing: ["telemetry"],
   user: [],
 }
 
@@ -23,12 +45,12 @@ export function canAccess(
   return Array.isArray(allowed) && allowed.includes(section)
 }
 
-export function landingSectionFor(role: Role | string | null | undefined):
-  | DashboardSection
-  | null {
+export function landingSectionFor(
+  role: Role | string | null | undefined,
+): DashboardSection | null {
   if (!role) return null
-  if (role === "admin") return "overview"
-  if (role === "marketing") return "notifications"
+  if (role === "admin") return "telemetry"
+  if (role === "marketing") return "telemetry"
   return null
 }
 

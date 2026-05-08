@@ -2,23 +2,25 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { canAccess, type Role } from "@/lib/permissions"
-import { UsersClient } from "./users-client"
+import { DeletionRequestsClient } from "./deletion-requests-client"
 
-export default async function UsersPage() {
+export default async function DeletionRequestsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
   const role = session.user.role as Role | undefined
-  if (!canAccess(role, "users")) redirect("/")
+  if (!canAccess(role, "deletion-requests")) redirect("/")
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Deletion requests
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Search, enable, disable, or delete user accounts.
+          Review user-initiated take-break and deletion requests.
         </p>
       </header>
-      <UsersClient />
+      <DeletionRequestsClient />
     </div>
   )
 }

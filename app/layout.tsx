@@ -1,6 +1,8 @@
 import "./globals.css"
 import { Space_Grotesk } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider"
+import { QueryProvider } from "@/components/query-provider"
+import { Toaster } from "@/components/ui/sonner"
 
 const fontSans = Space_Grotesk({
   subsets: ["latin"],
@@ -28,9 +30,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className={`${fontSans.variable} ${fontSerif.variable} ${fontMono.variable} antialiased`}>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <QueryProvider>
+            {children}
+            <Toaster />
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
 }
-

@@ -2,23 +2,23 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { canAccess, type Role } from "@/lib/permissions"
-import { UsersClient } from "./users-client"
+import { WorkEmailClient } from "./work-email-client"
 
-export default async function UsersPage() {
+export default async function WorkEmailPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
   const role = session.user.role as Role | undefined
-  if (!canAccess(role, "users")) redirect("/")
+  if (!canAccess(role, "work-email")) redirect("/")
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Work email</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Search, enable, disable, or delete user accounts.
+          Domain allowlist and pending verification reviews.
         </p>
       </header>
-      <UsersClient />
+      <WorkEmailClient />
     </div>
   )
 }
