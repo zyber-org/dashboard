@@ -1,28 +1,37 @@
 "use client"
 
+import {
+  getCoreRowModel,
+  useReactTable,
+  type SortingState,
+  type VisibilityState,
+} from "@tanstack/react-table"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import {
+  CheckCircle2Icon,
+  CircleSlashIcon,
+  GraduationCapIcon,
+  SearchIcon,
+  ShieldXIcon,
+  XIcon,
+} from "lucide-react"
 import { apiFetch } from "@/lib/fetcher"
 import type { AdminUsersPage } from "@/lib/zyber-types"
 import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { DataTable } from "@/components/ui/data-table"
+import { DataTableFacetedFilter } from "@/components/ui/data-table-faceted-filter"
+import { DataTablePagination } from "@/components/ui/data-table-pagination"
+import { DataTableViewOptions } from "@/components/ui/data-table-view-options"
 import {
   Dialog,
   DialogContent,
@@ -39,246 +48,412 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
+import { buildUserColumns, type SortKey } from "./columns"
 
-const PAGE_LIMIT = 50
+type StatusValue = "active" | "disabled" | "banned"
+type YesNo = "yes" | "no"
+
+type FilterState = {
+  search: string
+  college: string
+  status: StatusValue | null
+  workEmail: YesNo | null
+  onboarding: YesNo | null
+  sort: SortKey
+  order: "asc" | "desc"
+  page: number
+  limit: number
+}
+
+const DEFAULT_LIMIT = 25
+
+function parseFilters(p: URLSearchParams): FilterState {
+  const status = p.get("status")
+  const workEmail = p.get("work_email")
+  const onboarding = p.get("onboarding")
+  const sort = p.get("sort")
+  const order = p.get("order")
+  const page = Number.parseInt(p.get("page") ?? "1", 10)
+  const limit = Number.parseInt(p.get("limit") ?? String(DEFAULT_LIMIT), 10)
+
+  return {
+    search: p.get("search") ?? "",
+    college: p.get("college") ?? "",
+    status:
+      status === "active" || status === "disabled" || status === "banned"
+        ? status
+        : null,
+    workEmail: workEmail === "yes" || workEmail === "no" ? workEmail : null,
+    onboarding: onboarding === "yes" || onboarding === "no" ? onboarding : null,
+    sort:
+      sort === "username" || sort === "email" || sort === "first_name"
+        ? sort
+        : "created_at",
+    order: order === "asc" ? "asc" : "desc",
+    page: Number.isFinite(page) && page >= 1 ? page : 1,
+    limit:
+      Number.isFinite(limit) && limit > 0 && limit <= 100 ? limit : DEFAULT_LIMIT,
+  }
+}
+
+function urlParams(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams()
+  if (f.search) p.set("search", f.search)
+  if (f.college.trim()) p.set("college", f.college.trim())
+  if (f.status) p.set("status", f.status)
+  if (f.workEmail) p.set("work_email", f.workEmail)
+  if (f.onboarding) p.set("onboarding", f.onboarding)
+  if (f.sort !== "created_at") p.set("sort", f.sort)
+  if (f.order !== "desc") p.set("order", f.order)
+  if (f.page > 1) p.set("page", String(f.page))
+  if (f.limit !== DEFAULT_LIMIT) p.set("limit", String(f.limit))
+  return p
+}
+
+function apiQuery(f: FilterState): URLSearchParams {
+  const p = new URLSearchParams()
+  p.set("page", String(f.page))
+  p.set("limit", String(f.limit))
+  if (f.search) p.set("search", f.search)
+  if (f.college.trim()) p.set("college", f.college.trim())
+  if (f.status === "active") p.set("active", "yes")
+  if (f.status === "disabled") {
+    p.set("active", "no")
+    p.set("disabled", "no")
+  }
+  if (f.status === "banned") p.set("disabled", "yes")
+  if (f.workEmail) p.set("work_email", f.workEmail)
+  if (f.onboarding) p.set("onboarding", f.onboarding)
+  p.set("sort", f.sort)
+  p.set("order", f.order)
+  return p
+}
+
+const STATUS_OPTIONS = [
+  { label: "Active", value: "active", icon: CheckCircle2Icon },
+  { label: "Disabled", value: "disabled", icon: CircleSlashIcon },
+  { label: "Banned", value: "banned", icon: ShieldXIcon },
+]
+
+const WORK_EMAIL_OPTIONS = [
+  { label: "Verified", value: "yes", icon: CheckCircle2Icon },
+  { label: "Unverified", value: "no", icon: CircleSlashIcon },
+]
+
+const ONBOARDING_OPTIONS = [
+  { label: "Complete", value: "yes", icon: GraduationCapIcon },
+  { label: "Incomplete", value: "no", icon: CircleSlashIcon },
+]
 
 export function UsersClient() {
-  const [search, setSearch] = useState("")
-  const [searchInput, setSearchInput] = useState("")
-  const [page, setPage] = useState(1)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const filters = useMemo(
+    () => parseFilters(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  )
+
+  const [searchInput, setSearchInput] = useState(filters.search)
+  useEffect(() => setSearchInput(filters.search), [filters.search])
+
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+
+  const writeFilters = (patch: Partial<FilterState>, resetPage = true) => {
+    const merged = { ...filters, ...patch }
+    if (resetPage && patch.page === undefined) merged.page = 1
+    const qs = urlParams(merged).toString()
+    router.replace(qs ? `?${qs}` : "?", { scroll: false })
+  }
+
+  // Debounce search input → URL
+  useEffect(() => {
+    if (searchInput === filters.search) return
+    const t = window.setTimeout(() => writeFilters({ search: searchInput }), 300)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput])
+
+  const queryString = apiQuery(filters).toString()
   const qc = useQueryClient()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["zyber", "users", search, page],
-    queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: String(PAGE_LIMIT),
-      })
-      if (search) params.set("search", search)
-      return apiFetch<AdminUsersPage>(`/api/zyber/users?${params.toString()}`)
-    },
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["zyber", "users", queryString],
+    queryFn: () =>
+      apiFetch<AdminUsersPage>(`/api/zyber/users?${queryString}`),
+    placeholderData: (prev) => prev,
   })
 
   const action = useMutation({
-    mutationFn: (input: { action: "disable" | "enable" | "delete"; email: string }) =>
+    mutationFn: (input: {
+      action: "disable" | "enable" | "delete"
+      email: string
+      username: string
+    }) =>
       apiFetch<unknown>("/api/zyber/users/action", {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify({ action: input.action, email: input.email }),
       }),
     onSuccess: (_, input) => {
       toast.success(`User ${input.action}d`)
       qc.invalidateQueries({ queryKey: ["zyber", "users"] })
+      pendingDelete?.resolve()
+      setPendingDelete(null)
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => {
+      toast.error(err.message)
+      pendingDelete?.reject()
+      setPendingDelete(null)
+    },
   })
+
+  const [pendingDelete, setPendingDelete] = useState<{
+    email: string
+    username: string
+    resolve: () => void
+    reject: () => void
+  } | null>(null)
+
+  const handleAction = (input: {
+    action: "disable" | "enable" | "delete"
+    email: string
+    username: string
+  }) => {
+    if (input.action === "delete") {
+      // Defer; the dialog confirms.
+      setPendingDelete({
+        email: input.email,
+        username: input.username,
+        resolve: () => {},
+        reject: () => {},
+      })
+      return
+    }
+    action.mutate(input)
+  }
+
+  const columns = useMemo(
+    () =>
+      buildUserColumns({
+        sort: filters.sort,
+        order: filters.order,
+        onSort: (key) => {
+          const order =
+            filters.sort === key && filters.order === "asc" ? "desc" : "asc"
+          writeFilters({ sort: key, order })
+        },
+        isMutating: action.isPending,
+        onAction: handleAction,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filters.sort, filters.order, action.isPending],
+  )
+
+  const sorting: SortingState = [
+    { id: filters.sort, desc: filters.order === "desc" },
+  ]
 
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 0
 
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Search</CardTitle>
-          <CardDescription>
-            Match by username, email, name, or college.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setSearch(searchInput.trim())
-              setPage(1)
-            }}
-          >
-            <Input
-              placeholder="username, email, college…"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-            />
-            <Button type="submit">Search</Button>
-            {search ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setSearch("")
-                  setSearchInput("")
-                  setPage(1)
-                }}
-              >
-                Clear
-              </Button>
-            ) : null}
-          </form>
-        </CardContent>
-      </Card>
+  const table = useReactTable<AdminUsersPage["users"][number]>({
+    data: data?.users ?? [],
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+      pagination: {
+        pageIndex: filters.page - 1,
+        pageSize: filters.limit,
+      },
+    },
+    onColumnVisibilityChange: setColumnVisibility,
+    onSortingChange: (updater) => {
+      const next = typeof updater === "function" ? updater(sorting) : updater
+      const first = next[0]
+      if (!first) return
+      writeFilters({
+        sort: first.id as SortKey,
+        order: first.desc ? "desc" : "asc",
+      })
+    },
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function"
+          ? updater({ pageIndex: filters.page - 1, pageSize: filters.limit })
+          : updater
+      writeFilters(
+        {
+          page: next.pageIndex + 1,
+          limit: next.pageSize,
+        },
+        false,
+      )
+    },
+    rowCount: total,
+    pageCount: totalPages,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
+    getRowId: (row) => row.username,
+    getCoreRowModel: getCoreRowModel(),
+  })
 
+  const hasActiveFilters =
+    filters.search !== "" ||
+    filters.college !== "" ||
+    filters.status !== null ||
+    filters.workEmail !== null ||
+    filters.onboarding !== null
+
+  return (
+    <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle>
-              {isLoading ? "Loading…" : `${total} users`}
+              {isLoading
+                ? "Loading…"
+                : `${total.toLocaleString()} ${total === 1 ? "user" : "users"}`}
+              {isFetching && !isLoading ? (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  refreshing…
+                </span>
+              ) : null}
             </CardTitle>
-            <CardDescription>
-              Page {page} of {Math.max(1, totalPages)}.
-            </CardDescription>
           </div>
           <div className="flex gap-2">
             <BulkDialog />
             <AllToggleDialog />
           </div>
         </CardHeader>
-        <CardContent className="px-0">
-          {isLoading ? (
-            <div className="space-y-2 px-6">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <SearchIcon className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8 pr-8 h-8"
+                placeholder="username, email, name…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              {searchInput ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              ) : null}
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-6">User</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>College</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data?.users.map((u) => (
-                  <TableRow key={u.username}>
-                    <TableCell className="pl-6">
-                      <div className="font-medium">
-                        {u.first_name} {u.last_name}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        @{u.username}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {u.email}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {u.college || "—"}
-                    </TableCell>
-                    <TableCell>
-                      {u.is_banned ? (
-                        <Badge variant="destructive">Banned</Badge>
-                      ) : !u.is_active ? (
-                        <Badge variant="secondary">Disabled</Badge>
-                      ) : (
-                        <Badge>Active</Badge>
-                      )}
-                      {u.work_email_verified ? (
-                        <Badge variant="outline" className="ml-1">
-                          Verified
-                        </Badge>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right space-x-1">
-                      {u.is_active ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={action.isPending}
-                          onClick={() =>
-                            action.mutate({ action: "disable", email: u.email })
-                          }
-                        >
-                          Disable
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={action.isPending}
-                          onClick={() =>
-                            action.mutate({ action: "enable", email: u.email })
-                          }
-                        >
-                          Enable
-                        </Button>
-                      )}
-                      <DeleteUserButton
-                        email={u.email}
-                        username={u.username}
-                        onConfirm={() =>
-                          action.mutate({ action: "delete", email: u.email })
-                        }
-                        disabled={action.isPending}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {data && data.users.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="py-12 text-center text-sm text-muted-foreground"
-                    >
-                      No users matched.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          )}
+            <Input
+              className="h-8 w-full sm:w-48"
+              placeholder="College (exact)"
+              value={filters.college}
+              onChange={(e) => writeFilters({ college: e.target.value })}
+            />
+            <DataTableFacetedFilter
+              title="Status"
+              singleSelect
+              options={STATUS_OPTIONS}
+              selected={filters.status ? [filters.status] : []}
+              onChange={(v) =>
+                writeFilters({ status: (v[0] as StatusValue | undefined) ?? null })
+              }
+            />
+            <DataTableFacetedFilter
+              title="Work email"
+              singleSelect
+              options={WORK_EMAIL_OPTIONS}
+              selected={filters.workEmail ? [filters.workEmail] : []}
+              onChange={(v) =>
+                writeFilters({ workEmail: (v[0] as YesNo | undefined) ?? null })
+              }
+            />
+            <DataTableFacetedFilter
+              title="Onboarding"
+              singleSelect
+              options={ONBOARDING_OPTIONS}
+              selected={filters.onboarding ? [filters.onboarding] : []}
+              onChange={(v) =>
+                writeFilters({ onboarding: (v[0] as YesNo | undefined) ?? null })
+              }
+            />
+            {hasActiveFilters ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => {
+                  setSearchInput("")
+                  router.replace("?", { scroll: false })
+                }}
+              >
+                Reset
+                <XIcon className="ml-1 size-4" />
+              </Button>
+            ) : null}
+            <div className="ml-auto">
+              <DataTableViewOptions table={table} />
+            </div>
+          </div>
+
+          <div className="rounded-md border">
+            <DataTable
+              table={table}
+              isLoading={isLoading}
+              loadingRowCount={filters.limit > 12 ? 12 : filters.limit}
+              emptyState="No users matched."
+            />
+          </div>
+
+          <DataTablePagination
+            table={table}
+            pageSizes={[10, 25, 50, 100]}
+            totalLabel={(n) =>
+              `${n.toLocaleString()} ${n === 1 ? "user" : "users"} total`
+            }
+          />
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          disabled={page <= 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          Previous
-        </Button>
-        <span className="text-sm text-muted-foreground">
-          Page {page} / {Math.max(1, totalPages)}
-        </span>
-        <Button
-          variant="outline"
-          disabled={page >= totalPages}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </Button>
-      </div>
+      {pendingDelete ? (
+        <DeleteUserDialog
+          email={pendingDelete.email}
+          username={pendingDelete.username}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            action.mutate({
+              action: "delete",
+              email: pendingDelete.email,
+              username: pendingDelete.username,
+            })
+          }}
+          isPending={action.isPending}
+        />
+      ) : null}
     </div>
   )
 }
 
-function DeleteUserButton({
+function DeleteUserDialog({
   email,
   username,
+  onCancel,
   onConfirm,
-  disabled,
+  isPending,
 }: {
   email: string
   username: string
+  onCancel: () => void
   onConfirm: () => void
-  disabled?: boolean
+  isPending: boolean
 }) {
-  const [open, setOpen] = useState(false)
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={<Button size="sm" variant="destructive" disabled={disabled} />}
-      >
-        Delete
-      </DialogTrigger>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete @{username}?</DialogTitle>
@@ -288,15 +463,13 @@ function DeleteUserButton({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+          <Button variant="ghost" onClick={onCancel} disabled={isPending}>
             Cancel
           </Button>
           <Button
             variant="destructive"
-            onClick={() => {
-              onConfirm()
-              setOpen(false)
-            }}
+            onClick={onConfirm}
+            disabled={isPending}
           >
             Delete account
           </Button>

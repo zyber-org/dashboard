@@ -5,22 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import {
-  ActivityIcon,
-  CalendarIcon,
-  FlagIcon,
-  GaugeIcon,
-  HardDriveIcon,
-  MailPlusIcon,
-  RadioIcon,
-  ScrollIcon,
-  SettingsIcon,
-  ShieldIcon,
-  Trash2Icon,
-  UserCogIcon,
-  UsersIcon,
-  UsersRoundIcon,
-} from "lucide-react"
-import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -34,88 +18,8 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import {
-  canAccess,
-  type DashboardSection,
-  type Role,
-} from "@/lib/permissions"
-
-type NavItem = {
-  section: DashboardSection
-  href: string
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-}
-
-type NavGroup = {
-  label: string
-  items: NavItem[]
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Overview",
-    items: [
-      { section: "telemetry", href: "/", label: "Telemetry", icon: GaugeIcon },
-      { section: "live", href: "/live", label: "Live users", icon: ActivityIcon },
-    ],
-  },
-  {
-    label: "Moderation",
-    items: [
-      { section: "users", href: "/users", label: "Users", icon: UsersIcon },
-      { section: "reports", href: "/reports", label: "Reports", icon: FlagIcon },
-      {
-        section: "deletion-requests",
-        href: "/deletion-requests",
-        label: "Deletion requests",
-        icon: Trash2Icon,
-      },
-      {
-        section: "work-email",
-        href: "/work-email",
-        label: "Work email",
-        icon: ShieldIcon,
-      },
-    ],
-  },
-  {
-    label: "Content",
-    items: [
-      {
-        section: "communities",
-        href: "/communities",
-        label: "Communities",
-        icon: UsersRoundIcon,
-      },
-      { section: "events", href: "/events", label: "Events", icon: CalendarIcon },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { section: "logs", href: "/logs", label: "Logs", icon: ScrollIcon },
-      {
-        section: "maintainers",
-        href: "/maintainers",
-        label: "Maintainers",
-        icon: UserCogIcon,
-      },
-      { section: "version", href: "/version", label: "Version", icon: HardDriveIcon },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      {
-        section: "invitations",
-        href: "/invitations",
-        label: "Invitations",
-        icon: MailPlusIcon,
-      },
-    ],
-  },
-]
+import { canAccess, type Role } from "@/lib/permissions"
+import { NAV_GROUPS } from "@/lib/nav"
 
 export function AppSidebar({
   role,
